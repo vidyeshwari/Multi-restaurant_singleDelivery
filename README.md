@@ -4,8 +4,8 @@
 
 There are two kinds of users:
 
-- **Customer:** can browse restaurants, view menus, add items to cart, place orders, and see their own orders. Public signup always creates a `customer` account.
-- **Restaurant account:** created by the platform/setup and linked to **one specific restaurant**. That account can edit only its own restaurant details, add/edit/delete its own menu items, change item availability, and update its own sub-orders.
+- Customer: can browse restaurants, view menus, add items to cart, place orders, and see their own orders. Public signup always creates a customer account.
+- Restaurant account: created by the platform/setup and linked to one specific restaurant. That account can edit only its own restaurant details, add/edit/delete its own menu items, change item availability, and update its own sub-orders.
 
 A customer cannot open the restaurant panel. The database also rejects restaurant-panel requests from customers.
 
@@ -17,35 +17,20 @@ A restaurant account cannot:
 
 ## Demo restaurant login
 
-The setup script creates a restaurant account linked to the first seeded restaurant:
-
-- Email: `restaurant@multieats.test`
-- Password: `restaurant123`
-
-## Create another restaurant login
-
-The seed database already contains multiple restaurants. To create a login for one of them:
-
-```powershell
-cd backend
-node add-restaurant-user.js "Restaurant Name" restaurant@example.com Password123
-```
-
-The account is linked to the matching restaurant name. Customers cannot create restaurant accounts.
+Email: restaurant@multieats.test
+Password: restaurant123
 
 ## Run
 
-1. Configure `backend/.env` from `.env.example` with PostgreSQL credentials.
+1. Configure backend/.env from .env.example with PostgreSQL credentials.
 2. Make sure PostgreSQL is running.
-3. From `backend` run:
+3. From backend run:
 
-```powershell
 npm install
 npm run setup-db
 npm start
-```
 
-4. Open `frontend/login.html` or `frontend/index.html`.
+4. Open frontend/login.html or frontend/index.html.
 
 ## Customer flow
 
