@@ -1,0 +1,46 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Restaurant Panel · MultiEats</title><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="css/style.css"></head><body>
+<div class="wrap" id="panel" style="display:none"><h2 style="margin-top:0">Restaurant Panel</h2><div class="muted" id="who"></div><div class="tabs" id="tabs"></div><div id="c"></div></div>
+<script src="js/config.js"></script><script src="js/common.js"></script><script>
+// Customers/visitors never see this page. The database also enforces the same rule.
+const ALLOWED = isStaff();
+if (!ALLOWED) location.replace(getUser() ? 'index.html' : 'login.html?next=admin.html');
+else { $('#panel').style.display = ''; nav('admin'); }
+const T = { dash:'📊 Dashboard', orders:'🧾 Orders', menu:'📖 Menu', rest:'🍴 My Restaurant', refunds:'💸 Refunds' };
+const sc={pending:'y',preparing:'b',ready:'b',delivered:'g',cancelled:'r',paid:'g',unpaid:'y',refunded:'r',completed:'g',confirmed:'y'};
+const pill=s=>s?`<span class="pill ${sc[s]||''}">${esc(String(s).replace('_',' '))}</span>`:'<span class="muted">—</span>';
+const dt=d=>new Date(d).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+const wrap=h=>`<div class="card tbl-wrap">${h}</div>`;
+let CUR='dash', REST=null;
+function tab(k){CUR=k;$('#tabs').innerHTML=Object.entries(T).map(([a,b])=>`<button class="${a===k?'on':''}" onclick="tab('${a}')">${b}</button>`).join('');Promise.resolve(V[k]()).catch(e=>$('#c').innerHTML=`<div class="alert bad">${esc(e.message)}</div>`)}
+const V={
+ async dash(){
+  const [d,rv,rs]=await Promise.all([api('/admin/dashboard'),api('/admin/reports/revenue'),api('/admin/restaurants')]); REST=rs[0];
+  $('#who').innerHTML=`Managing: <b>${esc(REST?.name||'Your restaurant')}</b> — only this restaurant is accessible from this account.`;
+  const s=rv.summary||{}; const card=(t,v)=>`<div class="card"><span class="muted">${t}</span><b>${v}</b></div>`;
+  $('#c').innerHTML=`<div class="stat wide">${card('Orders',s.orders||0)}${card('Sales',money(s.gross))}${card('Menu items',d.menu_items||0)}${card('Active orders',d.active_orders||0)}</div><div class="card pad"><h3 style="margin-top:0">What you can manage</h3><p class="muted">Menu items, prices, availability, restaurant details and your restaurant's order status.</p><p class="muted"><b>You cannot:</b> add another restaurant, edit another restaurant, or manage another restaurant's menu.</p></div>`;
+ },
+ async orders(){
+  const d=await api('/admin/orders');
+  $('#c').innerHTML=wrap(`<table><tr><th>Order</th><th>Placed</th><th>Customer</th><th>Your amount</th><th>Your status</th><th>Payment</th><th>Action</th></tr>${d.map(o=>`<tr><td>#${o.order_id}</td><td>${dt(o.created_at)}</td><td>${esc(o.customer)}<div class="muted">${esc(o.phone||'')}</div></td><td><b>${money(o.sub_amount)}</b></td><td>${pill(o.sub_status)}</td><td>${pill(o.payment_status)}</td><td>${o.sub_status==='cancelled'?'—':`<select onchange="setSt(${o.sub_order_id},this.value)" style="width:auto"><option value="">Change…</option><option value="preparing">preparing</option><option value="ready">ready</option><option value="delivered">delivered</option><option value="cancelled">cancelled</option></select>`}</td></tr>`).join('')||'<tr><td colspan=7 class="empty">No orders for your restaurant</td></tr>'}</table>`);
+ },
+ async menu(){
+  if(!REST){const rs=await api('/admin/restaurants');REST=rs[0];}
+  const items=REST?await api(`/admin/restaurants/${REST.restaurant_id}/menu`):[];
+  const cats=[...new Set(items.map(i=>i.category))];
+  $('#c').innerHTML=`<div class="card pad"><b>${esc(REST.name)}</b><div class="muted">${esc(REST.area||'')} · ${esc(REST.cuisine_type||'')}</div></div>${wrap(`<table><tr><th>Item</th><th>Category</th><th>Price ₹</th><th>Veg</th><th>Bestseller</th><th>Available</th><th></th></tr>${items.map(i=>`<tr><td><input value="${esc(i.name)}" onchange="upd(${i.item_id},'name',this.value)" style="min-width:190px"><input value="${esc(i.description||'')}" onchange="upd(${i.item_id},'description',this.value)" style="margin-top:4px;min-width:190px"></td><td><input value="${esc(i.category)}" onchange="upd(${i.item_id},'category',this.value)" style="width:110px"></td><td><input type="number" value="${i.price}" onchange="upd(${i.item_id},'price',+this.value)" style="width:90px"></td><td><input type="checkbox" ${i.is_veg?'checked':''} onchange="upd(${i.item_id},'is_veg',this.checked)" style="width:auto"></td><td><input type="checkbox" ${i.is_bestseller?'checked':''} onchange="upd(${i.item_id},'is_bestseller',this.checked)" style="width:auto"></td><td><input type="checkbox" ${i.is_available?'checked':''} onchange="upd(${i.item_id},'is_available',this.checked)" style="width:auto"></td><td><button class="red sm" onclick="delM(${i.item_id})">Delete</button></td></tr>`).join('')||'<tr><td colspan=7 class="empty">No items yet</td></tr>'}</table>`)}<h3 class="t">➕ Add menu item</h3><div class="card pad" style="max-width:640px"><div class="two-col"><div><label>Item name</label><input id="n"><label>Category</label><input id="ct" list="cl" placeholder="Starters, Mains…"><datalist id="cl">${cats.map(c=>`<option>${esc(c)}`).join('')}</datalist></div><div><label>Description</label><input id="desc"><label>Price (₹)</label><input id="p" type="number"></div></div><label><input id="v" type="checkbox" checked style="width:auto"> Vegetarian</label><label><input id="bs" type="checkbox" style="width:auto"> Bestseller</label><br><button onclick="addM()">Add item</button></div>`;
+ },
+ async rest(){
+  const rs=await api('/admin/restaurants'); REST=rs[0];
+  if(!REST){$('#c').innerHTML='<div class="alert bad">This account is not linked to a restaurant.</div>';return;}
+  $('#c').innerHTML=`<div class="card pad"><h3 style="margin-top:0">${esc(REST.name)}</h3><div class="muted">You can edit only this restaurant.</div><div class="two-col"><div><label>Name</label><input id="e_name" value="${esc(REST.name)}"><label>Area</label><input id="e_area" value="${esc(REST.area||'')}"><label>Cuisine</label><input id="e_cuisine" value="${esc(REST.cuisine_type||'')}"><label>Address</label><input id="e_address" value="${esc(REST.address||'')}"></div><div><label>Cost for two (₹)</label><input id="e_cost" type="number" value="${REST.cost_for_two||''}"><label>Prep time (min)</label><input id="e_prep" type="number" value="${REST.prep_time_min||20}"><label>Photo URL</label><input id="e_photo" value="${esc(REST.photo_url||'')}"></div></div><br><button onclick="saveR()">Save changes</button></div>`;
+ },
+ async refunds(){const d=await api('/admin/refunds');$('#c').innerHTML=wrap(`<table><tr><th>Refund</th><th>Order</th><th>Restaurant</th><th>Amount</th><th>Reason</th><th>Status</th></tr>${d.map(r=>`<tr><td>#${r.refund_id}</td><td>#${r.order_id}</td><td>${esc(r.restaurant)}</td><td>${money(r.amount)}</td><td>${esc(r.reason)}</td><td>${pill(r.status)}</td></tr>`).join('')||'<tr><td colspan=6 class="empty">No refunds</td></tr>'}</table>`)}
+};
+async function setSt(id,s){if(!s)return;const reason=s==='cancelled'?prompt('Reason for cancellation?','Restaurant out of stock'):null;if(s==='cancelled'&&reason===null)return tab('orders');try{await api(`/sub-orders/${id}/status`,{method:'PATCH',body:{status:s,reason}});toast('Status updated');tab('orders')}catch(e){toast(e.message,'bad')}}
+const upd=(id,k,v)=>api('/admin/menu-items/'+id,{method:'PATCH',body:{[k]:v}}).then(()=>toast('Saved')).catch(e=>toast(e.message,'bad'));
+const delM=id=>confirm('Delete this menu item?')&&api('/admin/menu-items/'+id,{method:'DELETE'}).then(()=>{toast('Item deleted');tab('menu')}).catch(e=>toast(e.message,'bad'));
+const addM=()=>run(api('/admin/menu-items',{method:'POST',body:{name:$('#n').value,category:$('#ct').value||'Main course',description:$('#desc').value,price:+$('#p').value,is_veg:$('#v').checked,is_bestseller:$('#bs').checked}}),'Menu item added','menu');
+const saveR=()=>run(api('/admin/restaurants/'+REST.restaurant_id,{method:'PATCH',body:{name:$('#e_name').value,area:$('#e_area').value,cuisine_type:$('#e_cuisine').value,address:$('#e_address').value,cost_for_two:$('#e_cost').value,prep_time_min:$('#e_prep').value,photo_url:$('#e_photo').value}}),'Restaurant updated','rest');
+const run=async(p,ok,again)=>{try{await p;if(ok)toast(ok);tab(again||CUR)}catch(e){toast(e.message,'bad')}};
+if(ALLOWED)tab('dash');
+</script></body></html>

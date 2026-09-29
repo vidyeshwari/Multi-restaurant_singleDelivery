@@ -1,0 +1,17 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Login · MultiEats</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="css/style.css"></head><body>
+<div class="card form"><h2 id="h">Welcome back 👋</h2><p class="muted" id="sub">Log in to order from multiple restaurants in one delivery.</p>
+<div id="su" style="display:none"><label>Full name</label><input id="name"><label>Phone</label><input id="phone"></div>
+<label>Email</label><input id="email" type="email"><label>Password</label><input id="pw" type="password">
+<div id="err"></div><br><button style="width:100%" id="go">Log in</button>
+<p class="muted" style="text-align:center;margin-top:16px"><a href="#" id="tg" style="color:var(--brand);font-weight:600">New here? Create an account</a></p></div>
+<script src="js/config.js"></script><script src="js/common.js"></script><script>
+nav('login'); let signup=false;
+$('#tg').onclick=e=>{e.preventDefault();signup=!signup;$('#su').style.display=signup?'block':'none';$('#h').textContent=signup?'Create account':'Welcome back 👋';$('#go').textContent=signup?'Sign up':'Log in';$('#tg').textContent=signup?'Have an account? Log in':'New here? Create an account'};
+$('#go').onclick=async()=>{try{
+ const body={email:$('#email').value.trim(),password:$('#pw').value};
+ if(signup){body.name=$('#name').value.trim();body.phone=$('#phone').value;await api('/auth/signup',{method:'POST',body});toast('Account created! Logging in…')}
+ const d=await api('/auth/login',{method:'POST',body});store.set('user',{...d.user,token:d.token});
+ location=new URLSearchParams(location.search).get('next')||(d.user.role==='restaurant'?'admin.html':'index.html');
+}catch(e){$('#err').innerHTML=`<div class="alert bad">${esc(e.message)}</div>`}};
+</script></body></html>

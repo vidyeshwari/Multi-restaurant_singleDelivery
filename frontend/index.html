@@ -1,0 +1,48 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MultiEats · Multi-Restaurant Single Delivery</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="css/style.css"></head><body>
+<div class="wrap">
+<div class="hero"><h1>Biryani from one place.<br>Dessert from another. One delivery.</h1>
+<p>Order from multiple nearby restaurants in Pune in a single checkout: one delivery fee, one delivery partner, one tracking. Distances are verified with the Haversine formula.</p>
+<div class="steps"><span>📍 Set location</span><span>🍛 Pick restaurants</span><span>📏 Haversine check</span><span>🛵 One delivery</span></div></div>
+<div class="bar"><b>📍 Deliver to:</b>
+<select id="area" style="width:auto;min-width:190px"></select>
+<button class="ghost sm" id="geo">Use my location</button>
+<span style="margin-left:auto" class="muted">Radius</span>
+<select id="rad" style="width:auto"><option>2</option><option>3</option><option selected>5</option><option>8</option><option>15</option><option>30</option></select> km
+<span class="muted">Sort</span>
+<select id="sort" style="width:auto"><option value="distance">Nearest</option><option value="rating">Top rated</option><option value="eta">Fastest</option></select></div>
+<div class="row" style="margin-bottom:16px;flex-wrap:wrap"><div class="chips" id="cu"></div><input class="search" id="q" placeholder="Search restaurant, dish or area…"></div>
+<div id="list" class="grid"></div></div>
+<script src="js/config.js"></script><script src="js/common.js"></script><script>
+nav('home');
+let ALL = [], CU = 'All';
+function draw() {
+  const q = $('#q').value.toLowerCase(), sort = $('#sort').value;
+  const cus = ['All', ...new Set(ALL.map(r => r.cuisine_type))];
+  $('#cu').innerHTML = cus.map(c => `<button class="chip ${c === CU ? 'on' : ''}" data-c="${esc(c)}">${esc(c)}</button>`).join('');
+  $('#cu').querySelectorAll('[data-c]').forEach(b => b.onclick = () => { CU = b.dataset.c; draw(); });
+  const rs = ALL.filter(r => (CU === 'All' || r.cuisine_type === CU) && (r.name + ' ' + r.cuisine_type + ' ' + (r.area || '')).toLowerCase().includes(q))
+    .sort((a, b) => sort === 'rating' ? b.rating - a.rating : sort === 'eta' ? a.eta_min - b.eta_min : a.distance_km - b.distance_km);
+  $('#list').innerHTML = rs.length ? rs.map(r => `<div class="card rc" onclick="location='restaurant.html?id=${r.restaurant_id}'">
+    ${banner(r, 'img')}<div class="b"><div class="row"><h3>${esc(r.name)}</h3>${stars(r)}</div>
+    <div class="muted">${esc(r.cuisine_type)} · ${esc(r.area || '')}</div>
+    <div class="meta"><span class="pill g">📏 ${r.distance_km} km</span><span class="pill b">⏱ ${r.eta_min} min</span><span class="pill d">₹${r.cost_for_two} for two</span><span class="pill d">${reviews(r.rating_count)} ratings</span></div></div></div>`).join('')
+    : '<div class="empty" style="grid-column:1/-1">No restaurants match. Try a bigger radius.</div>';
+}
+function fillAreas() {
+  const l = getLoc(), known = PUNE_AREAS.some(a => a.label === l.label);
+  $('#area').innerHTML = (known ? '' : `<option selected>${esc(l.label)}</option>`) +
+    PUNE_AREAS.map(a => `<option ${a.label === l.label ? 'selected' : ''}>${esc(a.label)}</option>`).join('');
+}
+async function load() {
+  const l = getLoc();
+  try { ALL = await api(`/restaurants/nearby?lat=${l.lat}&lng=${l.lng}&radius=${$('#rad').value}`); if (CU !== 'All' && !ALL.some(r => r.cuisine_type === CU)) CU = 'All'; draw(); }
+  catch (e) { $('#list').innerHTML = `<div class="alert bad" style="grid-column:1/-1">${esc(e.message)}</div>`; }
+}
+$('#area').onchange = () => { const a = PUNE_AREAS.find(x => x.label === $('#area').value); if (a) { store.set('loc', a); load(); } };
+$('#rad').onchange = load; $('#q').oninput = draw; $('#sort').onchange = draw; cartBar();
+$('#geo').onclick = () => navigator.geolocation ? navigator.geolocation.getCurrentPosition(p => {
+  store.set('loc', { lat: p.coords.latitude, lng: p.coords.longitude, label: 'My current location' }); fillAreas(); load(); toast('Location updated');
+}, () => toast('Location permission denied', 'bad')) : toast('Geolocation unsupported', 'bad');
+fillAreas(); load();
+</script></body></html>

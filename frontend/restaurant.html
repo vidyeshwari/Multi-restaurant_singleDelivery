@@ -1,0 +1,21 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Menu · MultiEats</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="css/style.css"></head><body>
+<div class="wrap"><div id="c"></div><div id="sug"></div></div><div style="height:70px"></div>
+<script src="js/config.js"></script><script src="js/common.js"></script><script>
+nav('home');
+(async()=>{const id=new URLSearchParams(location.search).get('id');
+ if(!/^\d+$/.test(id||''))return $('#c').innerHTML='<div class="empty">No restaurant selected. <a href="index.html" style="color:var(--brand)">Browse restaurants</a></div>';
+ const L=getLoc();
+ try{const {restaurant:r,menu}=await api(`/restaurants/${id}?lat=${L.lat}&lng=${L.lng}`);window.R=r;window.M=menu;
+  const cats=[...new Set(menu.map(m=>m.category||'Menu'))];
+  const dist=r.distance_km!=null?` · 📏 ${r.distance_km} km from ${esc(L.label)} · ⏱ ~${r.eta_min} min`:'';
+  $('#c').innerHTML=`<div class="hero" style="padding:26px 30px"><h1 style="font-size:28px">${esc(r.name)}</h1><p>${esc(r.cuisine_type)} · ${esc(r.address)}<br>★ ${Number(r.rating).toFixed(1)} (${reviews(r.rating_count)} ratings) · ₹${r.cost_for_two} for two${dist}</p></div>
+  <div class="alert info">💡 Add items from other nearby restaurants too. They all arrive in <b>one delivery</b>.</div>
+  <div class="card">${cats.map(c=>`<div class="cat">${esc(c)}</div>${menu.filter(m=>(m.category||'Menu')===c).map(m=>`<div class="item"><div><span class="veg ${m.is_veg?'':'nv'}"></span><b>${esc(m.name)}</b>${m.is_bestseller?'<span class="best">Bestseller</span>':''}<div class="muted">${esc(m.description||'')}</div></div>
+  <div class="row" style="gap:16px"><b>${money(m.price)}</b><button class="sm" onclick="add(${m.item_id})">Add +</button></div></div>`).join('')}`).join('')||'<div class="empty">No items yet</div>'}</div>`;
+ cartBar();loadSuggestions($('#sug'));
+ }catch(e){$('#c').innerHTML=`<div class="alert bad">${esc(e.message)}</div>`}})();
+function add(id){const m=M.find(x=>x.item_id===id),c=getCart(),f=c.find(x=>x.item_id===id);
+ f?f.quantity++:c.push({item_id:id,name:m.name,price:m.price,quantity:1,restaurant_id:R.restaurant_id,restaurant_name:R.name});
+ setCart(c);toast(m.name+' added to cart');cartBar();loadSuggestions($('#sug'))}
+</script></body></html>

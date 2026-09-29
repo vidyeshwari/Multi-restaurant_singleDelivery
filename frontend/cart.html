@@ -1,0 +1,30 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Cart · MultiEats</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="css/style.css"></head><body>
+<div class="wrap"><h2 style="margin-top:0">Your cart</h2><div id="c"></div><div id="sug"></div></div>
+<script src="js/config.js"></script><script src="js/common.js"></script><script>
+nav('cart'); let V=null;
+function chg(id,d){const c=getCart(),i=c.find(x=>x.item_id===id);i.quantity+=d;setCart(c.filter(x=>x.quantity>0));render()}
+async function render(){const cart=getCart(),loc=getLoc();
+ if(!cart.length){$('#sug').innerHTML='';return $('#c').innerHTML='<div class="card empty">Your cart is empty 🛒<br><br><a class="btn" href="index.html">Browse restaurants</a></div>'}
+ const g={};cart.forEach(i=>(g[i.restaurant_id]??={name:i.restaurant_name,items:[]}).items.push(i));
+ const sub=cart.reduce((s,i)=>s+i.price*i.quantity,0);
+ $('#c').innerHTML=`<div class="two"><div class="card">${Object.values(g).map(x=>`<div class="grp"><span>🍴 ${esc(x.name)}</span><span>${money(x.items.reduce((s,i)=>s+i.price*i.quantity,0))}</span></div>
+ ${x.items.map(i=>`<div class="item"><div><b>${esc(i.name)}</b><div class="muted">${money(i.price)} each</div></div><div class="qty"><button onclick="chg(${i.item_id},-1)">−</button><b>${i.quantity}</b><button onclick="chg(${i.item_id},1)">+</button></div></div>`).join('')}`).join('')}</div>
+ <div><div class="card pad"><b>📍 Delivery</b><div class="muted" style="margin:4px 0 8px">Location: ${esc(loc.label)} <a href="index.html" style="color:var(--brand)">(change)</a></div>
+ <input id="addr" placeholder="Full delivery address" value="${esc(store.get('addr',''))}" oninput="store.set('addr',this.value)">
+ <div id="v"><div class="muted" style="margin-top:12px">Checking distances…</div></div>
+ <div class="tot"><span>Items</span><span>${money(sub)}</span></div><div class="tot"><span>Delivery (combined)</span><span id="df">—</span></div><div class="tot big"><span>Total</span><span id="tt">—</span></div>
+ <button style="width:100%;margin-top:14px" id="po" disabled onclick="place()">Place order</button></div></div></div>`;
+ loadSuggestions($('#sug'),render);
+ try{V=await api('/cart/validate',{method:'POST',body:{restaurant_ids:Object.keys(g).map(Number),lat:loc.lat,lng:loc.lng}});
+  const q=V.quote||{separate_deliveries:0,separate_fee:0,combined_fee:0,separate_km:0,route_km:0,eta_min:0,saved:0};$('#v').innerHTML=`<div class="alert ${V.ok?'ok':'bad'}">${V.ok?`✅ Haversine check passed — max gap between restaurants ${V.max_gap_km??0} km (limit ${V.limits.gap_km}), all within ${V.limits.dest_km} km of you.`:'❌ '+V.reasons.map(esc).join('<br>❌ ')}</div>
+  <div class="cmp"><div class="old"><span class="muted">${q.separate_deliveries} separate orders</span><b>${money(q.separate_fee)}</b><span class="muted">${q.separate_km} km riding</span></div>
+  <div class="win"><span class="muted">One combined delivery</span><b>${money(q.combined_fee)}</b><span class="muted">${q.route_km} km · ~${q.eta_min} min</span></div></div>
+  ${q.saved>0?`<div class="alert ok">💰 You save ${money(q.saved)} on delivery</div>`:''}`;
+  $('#df').textContent=money(q.combined_fee);$('#tt').textContent=money(sub+q.combined_fee);$('#po').disabled=!V.ok;
+ }catch(e){$('#v').innerHTML=`<div class="alert bad">${esc(e.message)}</div>`}}
+async function place(){if(!requireLogin())return;const loc=getLoc();
+ try{const d=await api('/orders',{method:'POST',body:{delivery_address:$('#addr').value||loc.label,delivery_lat:loc.lat,delivery_lng:loc.lng,items:getCart()}});
+  setCart([]);location='confirmation.html?id='+d.order_id}catch(e){toast(e.message,'bad')}}
+render();
+</script></body></html>

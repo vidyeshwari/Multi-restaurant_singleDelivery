@@ -1,0 +1,13 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>My orders · MultiEats</title><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="css/style.css"></head><body>
+<div class="wrap"><h2 style="margin-top:0">My orders</h2><div id="c"></div></div>
+<script src="js/config.js"></script><script src="js/common.js"></script><script>
+nav('orders');
+const sc={pending:'y',preparing:'b',ready:'b',delivered:'g',cancelled:'r'};
+(async()=>{if(!requireLogin())return;
+ try{const os=await api(`/users/${getUser().user_id}/orders`);
+ $('#c').innerHTML=os.length?os.map(o=>`<div class="card" style="margin-bottom:16px"><div class="grp"><span>Order #${o.order_id} <span class="muted">· ${new Date(o.created_at).toLocaleString()}</span></span><span>${money(o.total_amount)}</span></div>
+  ${o.sub_orders.map(s=>`<div class="item"><span>🍴 ${esc(s.restaurant)}</span><span>${money(s.amount)} <span class="pill ${sc[s.status]}">${s.status}</span></span></div>`).join('')}
+  <div class="item"><span class="muted">${o.sub_orders.length} restaurant(s) · delivery ${money(o.delivery_fee)}</span><a class="btn sm" href="confirmation.html?id=${o.order_id}">View</a></div></div>`).join(''):
+  '<div class="card empty">No orders yet. <a href="index.html" style="color:var(--brand)">Order now</a></div>'}
+ catch(e){$('#c').innerHTML=`<div class="alert bad">${esc(e.message)}</div>`}})();
+</script></body></html>
