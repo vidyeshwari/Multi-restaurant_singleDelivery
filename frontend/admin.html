@@ -1,18 +1,36 @@
 <!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Restaurant Panel · MultiEats</title><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="css/style.css"></head><body>
-<div class="wrap" id="panel" style="display:none"><h2 style="margin-top:0">Restaurant Panel</h2><div class="muted" id="who"></div><div class="tabs" id="tabs"></div><div id="c"></div></div>
+<div class="wrap" id="panel" style="display:none"><h2 style="margin-top:0">Restaurant Panel</h2><div class="muted" id="who"></div><div id="sw"></div><div class="tabs" id="tabs"></div><div id="c"></div></div>
 <script src="js/config.js"></script><script src="js/common.js"></script><script>
 // Customers/visitors never see this page. The database also enforces the same rule.
 const ALLOWED = isStaff();
 if (!ALLOWED) location.replace(getUser() ? 'index.html' : 'login.html?next=admin.html');
 else { $('#panel').style.display = ''; nav('admin'); }
-const T = { dash:'📊 Dashboard', orders:'🧾 Orders', menu:'📖 Menu', rest:'🍴 My Restaurant', refunds:'💸 Refunds' };
+const T = { dash:'📊 Dashboard', cust:'👥 Customer History', orders:'🧾 Orders', menu:'📖 Menu', rest:'🍴 My Restaurant', refunds:'💸 Refunds' };
 const sc={pending:'y',preparing:'b',ready:'b',delivered:'g',cancelled:'r',paid:'g',unpaid:'y',refunded:'r',completed:'g',confirmed:'y'};
 const pill=s=>s?`<span class="pill ${sc[s]||''}">${esc(String(s).replace('_',' '))}</span>`:'<span class="muted">—</span>';
 const dt=d=>new Date(d).toLocaleString('en-IN',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
 const wrap=h=>`<div class="card tbl-wrap">${h}</div>`;
 let CUR='dash', REST=null;
+let HIST=[];
+function histRows(name){
+  const rows=HIST.filter(h=>!name||h.customer===name);
+  $('#hist').innerHTML=wrap(`<table><tr><th>Order</th><th>Date</th><th>Customer</th><th>Restaurant</th><th>Items ordered</th><th>Amount</th><th>Status</th></tr>${rows.map(h=>`<tr><td>#${h.order_id}</td><td>${dt(h.created_at)}</td><td>${esc(h.customer)}</td><td>${esc(h.restaurant)}</td><td>${esc(h.items||'')}</td><td>${money(h.sub_amount)}</td><td>${pill(h.sub_status)}</td></tr>`).join('')||'<tr><td colspan=7 class="empty">No records</td></tr>'}</table>`);
+}
 function tab(k){CUR=k;$('#tabs').innerHTML=Object.entries(T).map(([a,b])=>`<button class="${a===k?'on':''}" onclick="tab('${a}')">${b}</button>`).join('');Promise.resolve(V[k]()).catch(e=>$('#c').innerHTML=`<div class="alert bad">${esc(e.message)}</div>`)}
 const V={
+     async cust(){
+  const d=await api('/admin/customer-history'), s=d.summary||{}; HIST=d.history||[];
+  const card=(t,v)=>`<div class="card"><span class="muted">${t}</span><b>${v}</b></div>`;
+  const max=Math.max(1,...d.customers.map(c=>c.order_count));
+  const bars=d.customers.map(c=>`<div style="display:flex;align-items:center;gap:10px;margin:6px 0"><span style="width:140px">${esc(c.name)}</span><div style="flex:1"><div style="height:18px;border-radius:6px;background:linear-gradient(90deg,#f97316,#ef4444);width:${Math.max(4,c.order_count/max*100)}%"></div></div><b style="width:30px">${c.order_count}</b></div>`).join('');
+  $('#c').innerHTML=`<div class="stat wide">${card('Total orders',s.total_orders||0)}${card('Customers',s.customers||0)}${card('Revenue',money(s.revenue))}${card('Order records',HIST.length)}</div>
+  <div class="card pad"><h3 style="margin-top:0">Orders per customer</h3>${bars||'<div class="empty">No data</div>'}</div>
+  ${wrap(`<table><tr><th>Customer</th><th>Orders</th><th>Total spent</th><th>Last order</th></tr>${d.customers.map(c=>`<tr><td>${esc(c.name)}</td><td><b>${c.order_count}</b></td><td>${money(c.spent)}</td><td>${dt(c.last_order)}</td></tr>`).join('')}</table>`)}
+  <h3 class="t">Full order history</h3>
+  <div class="card pad"><label>Filter by customer</label><select id="hf" onchange="histRows(this.value)" style="width:auto"><option value="">All customers</option>${d.customers.map(c=>`<option>${esc(c.name)}</option>`).join('')}</select></div>
+  <div id="hist"></div>`;
+  histRows('');
+ },
  async dash(){
   const [d,rv,rs]=await Promise.all([api('/admin/dashboard'),api('/admin/reports/revenue'),api('/admin/restaurants')]); REST=rs[0];
   $('#who').innerHTML=`Managing: <b>${esc(REST?.name||'Your restaurant')}</b> — only this restaurant is accessible from this account.`;
@@ -42,5 +60,15 @@ const delM=id=>confirm('Delete this menu item?')&&api('/admin/menu-items/'+id,{m
 const addM=()=>run(api('/admin/menu-items',{method:'POST',body:{name:$('#n').value,category:$('#ct').value||'Main course',description:$('#desc').value,price:+$('#p').value,is_veg:$('#v').checked,is_bestseller:$('#bs').checked}}),'Menu item added','menu');
 const saveR=()=>run(api('/admin/restaurants/'+REST.restaurant_id,{method:'PATCH',body:{name:$('#e_name').value,area:$('#e_area').value,cuisine_type:$('#e_cuisine').value,address:$('#e_address').value,cost_for_two:$('#e_cost').value,prep_time_min:$('#e_prep').value,photo_url:$('#e_photo').value}}),'Restaurant updated','rest');
 const run=async(p,ok,again)=>{try{await p;if(ok)toast(ok);tab(again||CUR)}catch(e){toast(e.message,'bad')}};
-if(ALLOWED)tab('dash');
+async function initSwitch(){
+  if(getUser()?.email!=='restaurant@multieats.test')return;
+  const [rs,cur]=await Promise.all([api('/restaurants'),api('/admin/restaurants')]);
+  $('#sw').innerHTML=`<div class="card pad"><label>Select restaurant</label><select id="rsel" onchange="switchR(this.value)" style="width:auto">${rs.map(r=>`<option value="${r.restaurant_id}" ${cur[0]&&cur[0].restaurant_id===r.restaurant_id?'selected':''}>${esc(r.name)}</option>`).join('')}</select></div>`;
+}
+async function switchR(id){
+  try{await api('/admin/switch-restaurant',{method:'POST',body:{restaurant_id:+id}});REST=null;toast('Restaurant changed');tab(CUR)}
+  catch(e){toast(e.message,'bad')}
+}
+if(ALLOWED)tab('cust');
+if(ALLOWED)initSwitch();
 </script></body></html>

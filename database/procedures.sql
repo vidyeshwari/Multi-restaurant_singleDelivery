@@ -204,6 +204,10 @@ BEGIN
     PERFORM sp_fail(400, 'restaurant_ids, lat and lng are required');
   END IF;
   SELECT array_agg(DISTINCT x) INTO v_ids FROM unnest(p_ids) x;
+    IF cardinality(v_ids) > COALESCE(sp_cfg('max_restaurants_per_order'), 3) THEN
+    v_reasons := v_reasons || to_jsonb(format('You can order from at most %s restaurants at once',
+                   COALESCE(sp_cfg('max_restaurants_per_order'), 3)::int));
+  END IF;
 
   SELECT COUNT(*), COALESCE(jsonb_agg(jsonb_build_object('restaurant_id', restaurant_id, 'name', name, 'lat', lat, 'lng', lng,
            'dist_km', round(haversine_km(lat, lng, p_lat, p_lng)::numeric, 2)) ORDER BY restaurant_id), '[]')
@@ -421,7 +425,7 @@ DECLARE v_rid INT;
 BEGIN
   PERFORM sp_require_staff(p_actor); v_rid := sp_staff_restaurant(p_actor);
   RETURN COALESCE((SELECT jsonb_agg(to_jsonb(t) ORDER BY t.order_id DESC) FROM (
-    SELECT o.order_id, o.created_at, so.sub_amount, so.sub_status, o.overall_status,
+    SELECT o.order_id, o.created_at, so.sub_amount, so.sub_status, o.overall_status,so.sub_order_id,
            o.delivery_address, u.name AS customer, u.phone, p.status AS payment_status,
            da.status AS delivery_status, dp.name AS partner, r.name AS restaurant
       FROM SubOrders so JOIN Orders o ON o.order_id = so.order_id JOIN Users u ON u.user_id = o.user_id

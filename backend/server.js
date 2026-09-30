@@ -6,7 +6,7 @@ require('dotenv').config();
 const crypto = require('crypto');
 const express = require('express'), cors = require('cors'), bcrypt = require('bcryptjs');
 const { Pool } = require('pg');
-
+const path = require('path');
 const pool = new Pool({
   user: process.env.DB_USER, password: process.env.DB_PASSWORD,
   host: process.env.DB_HOST || 'localhost', port: process.env.DB_PORT || 5432,
@@ -14,7 +14,7 @@ const pool = new Pool({
 });
 const app = express();
 app.use(cors()); app.use(express.json());
-
+app.use(express.static(path.join(__dirname, '..', 'frontend')));
 // ---------- login token (HMAC signed, no extra packages). The role is NOT in the token: the database checks it. ----------
 const SECRET = process.env.AUTH_SECRET || crypto.randomBytes(32).toString('hex');
 if (!process.env.AUTH_SECRET) console.warn('AUTH_SECRET is not set in .env: using a random one, everyone is logged out when the server restarts.');
@@ -89,6 +89,7 @@ route('patch', '/sub-orders/:id/status', 'sp_update_sub_order_status', q => [q.a
 route('get', '/admin/dashboard', 'sp_admin_dashboard', q => [q.actor], true);
 route('get', '/admin/reports/revenue', 'sp_admin_revenue_report', q => [q.actor], true);
 route('get', '/admin/orders', 'sp_admin_orders', q => [q.actor], true);
+
 route('get', '/admin/sub-orders', 'sp_admin_sub_orders', q => [q.actor], true);
 route('get', '/admin/refunds', 'sp_admin_refunds', q => [q.actor], true);
 route('get', '/admin/restaurants', 'sp_admin_restaurants', q => [q.actor], true);
@@ -97,7 +98,8 @@ route('get', '/admin/restaurants/:id/menu', 'sp_admin_restaurant_menu', q => [q.
 route('post', '/admin/menu-items', 'sp_admin_add_menu_item', q => [q.actor, json(q.body)], true);
 route('patch', '/admin/menu-items/:id', 'sp_admin_update_menu_item', q => [q.actor, q.params.id, json(q.body)], true);
 route('delete', '/admin/menu-items/:id', 'sp_admin_delete_menu_item', q => [q.actor, q.params.id], true);
-
+route('get', '/admin/customer-history', 'sp_admin_customer_history', q => [q.actor], true);
+route('post', '/admin/switch-restaurant', 'sp_admin_switch_restaurant', q => [q.actor, q.body.restaurant_id], true);
 // ---------- Health: shows that both tiers are alive (used by the Architecture page) ----------
 app.get('/health', async (_q, res) => {
   const t0 = Date.now();

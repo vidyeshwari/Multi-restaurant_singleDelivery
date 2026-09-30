@@ -7,6 +7,7 @@ const getUser = () => store.get('user', null);
 const isStaff = () => { const u = getUser(); return !!u && u.role === 'restaurant'; };  // UI only: the database enforces the real check
 const getCart = () => store.get('cart', []);
 const setCart = c => { store.set('cart', c); const b = $('#cbadge'); if (b) b.textContent = c.reduce((s, i) => s + i.quantity, 0); };
+
 // Real Pune localities (approximate centres) - the customer picks where the food should be delivered
 const PUNE_AREAS = [
   { label: 'Deccan Gymkhana', lat: 18.5167, lng: 73.8419 }, { label: 'Shivajinagar', lat: 18.5308, lng: 73.8474 },
