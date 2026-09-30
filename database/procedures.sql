@@ -586,3 +586,43 @@ CREATE OR REPLACE FUNCTION sp_health() RETURNS JSONB LANGUAGE sql STABLE AS $$
                                  'menu_items', (SELECT COUNT(*) FROM MenuItems)::int,
                                  'orders', (SELECT COUNT(*) FROM Orders)::int))
 $$;
+
+-- ---------- extra: restaurant limit, customer history, platform admin ----------
+INSERT INTO AppConfig (key, value)
+SELECT 'max_restaurants_per_order', 3
+WHERE NOT EXISTS (SELECT 1 FROM AppConfig WHERE key = 'max_restaurants_per_order');
+
+ALTER TABLE Users ADD COLUMN IF NOT EXISTS is_platform_admin BOOLEAN NOT NULL DEFAULT FALSE;
+
+CREATE OR REPLACE FUNCTION sp_admin_switch_restaurant(p_actor INT, p_rid INT) RETURNS JSONB LANGUAGE plpgsql AS $$
+BEGIN
+  PERFORM sp_require_staff(p_actor);
+  IF NOT EXISTS (SELECT 1 FROM Users WHERE user_id = p_actor AND is_platform_admin) THEN
+    PERFORM sp_fail(403, 'Only the platform admin can switch restaurants');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM Restaurants WHERE restaurant_id = p_rid) THEN
+    PERFORM sp_fail(404, 'Restaurant not found');
+  END IF;
+  UPDATE Users SET restaurant_id = p_rid WHERE user_id = p_actor;
+  RETURN jsonb_build_object('restaurant_id', p_rid);
+END $$;
+
+CREATE OR REPLACE FUNCTION sp_admin_customer_history(p_actor INT) RETURNS JSONB LANGUAGE plpgsql AS $$
+BEGIN
+  PERFORM sp_require_staff(p_actor);
+  RETURN jsonb_build_object(
+    'summary', (SELECT jsonb_build_object('total_orders', COUNT(*), 'customers', COUNT(DISTINCT user_id),
+                        'revenue', COALESCE(SUM(total_amount), 0)) FROM Orders),
+    'customers', COALESCE((SELECT jsonb_agg(to_jsonb(c) ORDER BY c.order_count DESC, c.name) FROM (
+        SELECT u.user_id, u.name, COUNT(o.order_id)::int AS order_count,
+               COALESCE(SUM(o.total_amount), 0) AS spent, MAX(o.created_at) AS last_order
+          FROM Users u JOIN Orders o ON o.user_id = u.user_id GROUP BY u.user_id, u.name) c), '[]'),
+    'history', COALESCE((SELECT jsonb_agg(to_jsonb(h) ORDER BY h.created_at DESC, h.order_id DESC) FROM (
+        SELECT o.order_id, o.created_at, u.name AS customer, r.name AS restaurant, so.sub_status, so.sub_amount,
+               (SELECT string_agg(m.name || ' x' || soi.quantity, ', ' ORDER BY soi.id)
+                  FROM SubOrderItems soi JOIN MenuItems m ON m.item_id = soi.item_id
+                 WHERE soi.sub_order_id = so.sub_order_id) AS items
+          FROM SubOrders so JOIN Orders o ON o.order_id = so.order_id
+          JOIN Users u ON u.user_id = o.user_id JOIN Restaurants r ON r.restaurant_id = so.restaurant_id
+         ORDER BY o.created_at DESC, o.order_id DESC LIMIT 200) h), '[]'));
+END $$;
