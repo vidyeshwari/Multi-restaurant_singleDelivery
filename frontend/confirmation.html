@@ -2,21 +2,24 @@
 <div class="wrap"><div id="c"></div></div>
 <script src="js/config.js"></script><script src="js/common.js"></script><script>
 nav('orders');
-const sc={pending:'y',preparing:'b',ready:'b',delivered:'g',cancelled:'r'};
+const sc={pending:'y',preparing:'b',ready:'b',done:'b',delivered:'g',cancelled:'r'};
+// The customer sees ONE status per order: pending until every restaurant is done, then delivered.
+const subLabel=(s,o)=>s==='delivered'&&o.overall_status!=='delivered'?'done':s;
 async function load(){const id=new URLSearchParams(location.search).get('id');
  if(!/^\d+$/.test(id||''))return $('#c').innerHTML='<div class="empty">No order selected.</div>';
  try{const {order:o,sub_orders:s,payment:p,delivery:d}=await api('/orders/'+id);
  window.OID=id;
- $('#c').innerHTML=`<div class="hero" style="padding:26px 30px"><h1 style="font-size:28px">🎉 Order #${o.order_id} confirmed</h1><p>${s.length} restaurant${s.length>1?'s':''} · <b>one payment</b> · <b>one delivery</b></p></div>
- <div class="two"><div>${s.map(x=>`<div class="card" style="margin-bottom:16px"><div class="grp"><span>🍴 ${esc(x.restaurant_name)} <span class="muted">(sub-order #${x.sub_order_id})</span></span><span class="pill ${sc[x.sub_status]}">${x.sub_status}</span></div>
+ const st=o.overall_status||'pending';
+ $('#c').innerHTML=`<div class="hero" style="padding:26px 30px"><h1 style="font-size:28px">🎉 Order #${o.order_id} confirmed</h1><p>${s.length} restaurant${s.length>1?'s':''} · <b>one payment</b> · <b>one delivery</b> · Status: <span class="pill ${sc[st]||'y'}">${esc(st)}</span></p></div>
+ <div class="two"><div>${s.map(x=>{const l=subLabel(x.sub_status,o);return `<div class="card" style="margin-bottom:16px"><div class="grp"><span>🍴 ${esc(x.restaurant_name)} <span class="muted">(sub-order #${x.sub_order_id})</span></span><span class="pill ${sc[l]||''}">${l}</span></div>
   ${x.items.map(i=>`<div class="item"><span>${i.quantity} × ${esc(i.name)}</span><span>${money(i.price_at_order*i.quantity)}</span></div>`).join('')}
-  <div class="item"><b>Sub-total</b><b>${money(x.sub_amount)}</b></div></div>`).join('')}</div>
+  <div class="item"><b>Sub-total</b><b>${money(x.sub_amount)}</b></div></div>`}).join('')}</div>
  <div><div class="card pad"><b>Bill</b><div class="tot"><span>Items</span><span>${money(o.subtotal)}</span></div><div class="tot"><span>Delivery</span><span>${money(o.delivery_fee)}</span></div>
   ${o.separate_fee_estimate>o.delivery_fee?`<div class="alert ok">Saved ${money(o.separate_fee_estimate-o.delivery_fee)} vs separate orders</div>`:''}
   <div class="tot big"><span>Total</span><span>${money(o.total_amount)}</span></div><div class="muted">📍 ${esc(o.delivery_address)}</div></div>
  <div class="card pad" style="margin-top:16px"><b>Payment</b> <span class="pill ${p.status==='paid'?'g':'y'}">${p.status}</span><br><br>
   <button ${p.status!=='unpaid'?'disabled':''} onclick="act('pay','Payment successful')">Simulate payment</button></div>
- <div class="card pad" style="margin-top:16px"><b>Delivery</b><br>${d?`<div class="alert ok">🛵 ${esc(d.name)} (${esc(d.phone)}) · ${d.distance_km} km from first pickup</div>`:`<div class="muted" style="margin:8px 0">No partner assigned yet</div><button onclick="act('assign-delivery','Partner assigned')">Assign delivery partner</button>`}</div></div></div>`;
+ <div class="card pad" style="margin-top:16px"><b>Delivery</b><br>${d?`<div class="alert ok">🛵 ${esc(d.name)} (${esc(d.phone)}) · ${d.distance_km} km from first pickup</div>`:`<div class="muted" style="margin:8px 0">A delivery partner will be assigned once your food is ready.</div>`}</div></div></div>`;
  }catch(e){$('#c').innerHTML=`<div class="alert bad">${esc(e.message)}</div>`}}
 async function act(p,m){try{await api(`/orders/${OID}/${p}`,{method:'POST'});toast(m);load()}catch(e){toast(e.message,'bad')}}
 load();

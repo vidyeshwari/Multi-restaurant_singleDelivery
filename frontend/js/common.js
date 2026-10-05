@@ -96,3 +96,14 @@ function cartBar() {
   const n = c.reduce((s, i) => s + i.quantity, 0), t = c.reduce((s, i) => s + i.price * i.quantity, 0);
   b.innerHTML = `<span>🛒 ${n} item${n > 1 ? 's' : ''} · ${new Set(c.map(i => i.restaurant_id)).size} restaurant(s)</span><b>${money(t)} · View cart →</b>`;
 }
+
+// Customers never see "Assign delivery": hide it on every page (restaurant staff still see it)
+if (!isStaff()) {
+  const hideAssign = () => document.querySelectorAll('button, a').forEach(b => {
+    if (/assign/i.test(b.getAttribute('onclick') || '') || /assign.*deliver/i.test(b.textContent)) b.remove();
+  });
+  document.addEventListener('DOMContentLoaded', () => {
+    hideAssign();
+    new MutationObserver(hideAssign).observe(document.body, { childList: true, subtree: true });
+  });
+}
