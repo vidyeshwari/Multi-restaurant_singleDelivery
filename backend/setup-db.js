@@ -4,13 +4,18 @@ const bcrypt = require('bcryptjs');
 const fs = require('fs'), path = require('path'), { Client } = require('pg');
 const cfg = { user: process.env.DB_USER, password: process.env.DB_PASSWORD, host: process.env.DB_HOST || 'localhost', port: process.env.DB_PORT || 5432 };
 const dbName = process.env.DB_NAME || 'food_delivery';
+const useUrl = !!process.env.DATABASE_URL;
 (async () => {
-  const admin = new Client({ ...cfg, database: 'postgres' });
-  await admin.connect();
-  const ex = await admin.query('SELECT 1 FROM pg_database WHERE datname=$1', [dbName]);
-  if (!ex.rowCount) { await admin.query(`CREATE DATABASE "${dbName}"`); console.log('Created database', dbName); }
-  await admin.end();
-  const c = new Client({ ...cfg, database: dbName });
+  if (!useUrl) {
+    const admin = new Client({ ...cfg, database: 'postgres' });
+    await admin.connect();
+    const ex = await admin.query('SELECT 1 FROM pg_database WHERE datname=$1', [dbName]);
+    if (!ex.rowCount) { await admin.query(`CREATE DATABASE "${dbName}"`); console.log('Created database', dbName); }
+    await admin.end();
+  }
+  const c = new Client(useUrl
+    ? { connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } }
+    : { ...cfg, database: dbName });
   await c.connect();
   for (const f of ['schema.sql', 'procedures.sql', 'seed.sql']) {
     await c.query(fs.readFileSync(path.join(__dirname, '..', 'database', f), 'utf8'));

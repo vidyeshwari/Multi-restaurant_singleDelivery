@@ -7,11 +7,13 @@ const crypto = require('crypto');
 const express = require('express'), cors = require('cors'), bcrypt = require('bcryptjs');
 const { Pool } = require('pg');
 const path = require('path');
-const pool = new Pool({
-  user: process.env.DB_USER, password: process.env.DB_PASSWORD,
-  host: process.env.DB_HOST || 'localhost', port: process.env.DB_PORT || 5432,
-  database: process.env.DB_NAME || 'food_delivery',
-});
+const pool = new Pool(process.env.DATABASE_URL
+  ? { connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } }
+  : {
+      user: process.env.DB_USER, password: process.env.DB_PASSWORD,
+      host: process.env.DB_HOST || 'localhost', port: process.env.DB_PORT || 5432,
+      database: process.env.DB_NAME || 'food_delivery',
+    });
 const app = express();
 app.use(cors()); app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'frontend')));

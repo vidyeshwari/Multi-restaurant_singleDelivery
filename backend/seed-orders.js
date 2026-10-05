@@ -7,11 +7,13 @@ const bcrypt = require('bcryptjs');
 const { Pool } = require('pg');
 
 const N = Math.max(1, parseInt(process.argv[2], 10) || 50);
-const pool = new Pool({
-  user: process.env.DB_USER, password: process.env.DB_PASSWORD,
-  host: process.env.DB_HOST || 'localhost', port: process.env.DB_PORT || 5432,
-  database: process.env.DB_NAME || 'food_delivery',
-});
+const pool = new Pool(process.env.DATABASE_URL
+  ? { connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } }
+  : {
+      user: process.env.DB_USER, password: process.env.DB_PASSWORD,
+      host: process.env.DB_HOST || 'localhost', port: process.env.DB_PORT || 5432,
+      database: process.env.DB_NAME || 'food_delivery',
+    });
 const call = async (fn, args = []) =>
   (await pool.query(`SELECT ${fn}(${args.map((_, i) => '$' + (i + 1)).join(',')}) AS r`, args)).rows[0].r;
 
