@@ -626,3 +626,45 @@ BEGIN
           JOIN Users u ON u.user_id = o.user_id JOIN Restaurants r ON r.restaurant_id = so.restaurant_id
          ORDER BY o.created_at DESC, o.order_id DESC LIMIT 200) h), '[]'));
 END $$;
+
+
+
+-- ---------- one status per order for the customer ----------
+CREATE OR REPLACE FUNCTION sp_order_display_status(p_order INT) RETURNS TEXT LANGUAGE sql STABLE AS $$
+  SELECT CASE
+    WHEN NOT EXISTS (SELECT 1 FROM SubOrders WHERE order_id = p_order) THEN 'pending'
+    WHEN NOT EXISTS (SELECT 1 FROM SubOrders WHERE order_id = p_order AND sub_status <> 'cancelled') THEN 'cancelled'
+    WHEN NOT EXISTS (SELECT 1 FROM SubOrders WHERE order_id = p_order AND sub_status NOT IN ('delivered','cancelled')) THEN 'delivered'
+    ELSE 'pending'
+  END
+$$;
+
+CREATE OR REPLACE FUNCTION sp_user_orders(p_actor INT) RETURNS JSONB LANGUAGE plpgsql AS $$
+BEGIN
+  IF p_actor IS NULL THEN PERFORM sp_fail(401, 'Please log in'); END IF;
+  RETURN COALESCE((
+    SELECT jsonb_agg(to_jsonb(o) || jsonb_build_object('overall_status', sp_order_display_status(o.order_id), 'sub_orders', s.subs)
+                     ORDER BY o.created_at DESC, o.order_id DESC)
+      FROM Orders o
+      JOIN LATERAL (SELECT jsonb_agg(jsonb_build_object('sub_order_id', so.sub_order_id, 'restaurant', r.name,
+                                                        'status', so.sub_status, 'amount', so.sub_amount) ORDER BY so.sub_order_id) AS subs
+                      FROM SubOrders so JOIN Restaurants r ON r.restaurant_id = so.restaurant_id WHERE so.order_id = o.order_id) s ON s.subs IS NOT NULL
+     WHERE o.user_id = p_actor), '[]');
+END $$;
+
+CREATE OR REPLACE FUNCTION sp_order_detail(p_actor INT, p_order INT) RETURNS JSONB LANGUAGE plpgsql AS $$
+BEGIN
+  PERFORM sp_assert_order_access(p_order, p_actor);
+  RETURN jsonb_build_object(
+    'order', (SELECT to_jsonb(o) || jsonb_build_object('overall_status', sp_order_display_status(o.order_id))
+                FROM Orders o WHERE o.order_id = p_order),
+    'sub_orders', COALESCE((
+       SELECT jsonb_agg(to_jsonb(so) || jsonb_build_object('restaurant_name', r.name, 'items', COALESCE((
+                SELECT jsonb_agg(to_jsonb(soi) || jsonb_build_object('name', m.name) ORDER BY soi.id)
+                  FROM SubOrderItems soi JOIN MenuItems m ON m.item_id = soi.item_id WHERE soi.sub_order_id = so.sub_order_id), '[]'))
+              ORDER BY so.sub_order_id)
+         FROM SubOrders so JOIN Restaurants r ON r.restaurant_id = so.restaurant_id WHERE so.order_id = p_order), '[]'),
+    'payment', (SELECT to_jsonb(p) FROM Payments p WHERE p.order_id = p_order),
+    'delivery', (SELECT to_jsonb(da) || jsonb_build_object('name', dp.name, 'phone', dp.phone)
+                   FROM DeliveryAssignment da JOIN DeliveryPartners dp ON dp.partner_id = da.partner_id WHERE da.order_id = p_order));
+END $$;
